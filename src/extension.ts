@@ -1,26 +1,130 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
+import { logger } from './common/logger';
+import { allocatePort } from './common/ports';
+import type { ServerMetadata } from './common/serverMetadata';
+import { getWorkspaceIdentity } from './common/workspaceIdentity';
+import { LocalMcpServer } from './mcp/server';
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
-export function activate(context: vscode.ExtensionContext) {
-
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "vscode-lsp-mcp" is now active!');
-
-	// The command has been defined in the package.json file
-	// Now provide the implementation of the command with registerCommand
-	// The commandId parameter must match the command field in package.json
-	const disposable = vscode.commands.registerCommand('vscode-lsp-mcp.helloWorld', () => {
-		// The code you place here will be executed every time your command is executed
-		// Display a message box to the user
-		vscode.window.showInformationMessage('Hello World from vscode-lsp-mcp!');
-	});
-
-	context.subscriptions.push(disposable);
+interface RuntimeState {
+	server?: LocalMcpServer;
+	metadata?: ServerMetadata;
 }
 
-// This method is called when your extension is deactivated
-export function deactivate() {}
+const runtimeState: RuntimeState = {};
+
+function getConfig() {
+	const config = vscode.workspace.getConfiguration('vscode-lsp-mcp');
+	return {
+		enabled: config.get<boolean>('enabled', true),
+		host: config.get<string>('host', '127.0.0.1'),
+		basePort: config.get<number>('basePort', 9527),
+		portRangeSize: config.get<number>('portRangeSize', 200),
+		corsEnabled: config.get<boolean>('cors.enabled', true),
+		corsAllowOrigins: config.get<string>('cors.allowOrigins', '*'),
+		corsWithCredentials: config.get<boolean>('cors.withCredentials', false),
+		showStartupNotification: config.get<boolean>('showStartupNotification', true),
+	};
+}
+
+async function startRuntime(context: vscode.ExtensionContext): Promise<void> {
+	const workspaceIdentity = getWorkspaceIdentity();
+	logger.info('extension', 'activating extension', workspaceIdentity);
+
+	const config = getConfig();
+	if (!config.enabled) {
+		logger.info('extension', 'extension disabled by configuration');
+		return;
+	}
+
+	const allocation = await allocatePort(
+		context,
+		config.host,
+		config.basePort,
+		config.portRangeSize,
+		workspaceIdentity.workspaceKey,
+	);
+
+	if (allocation.mode === 'reuse' && allocation.reusedMetadata) {
+		runtimeState.metadata = allocation.reusedMetadata;
+		logger.info('extension', 'reusing existing workspace MCP server', allocation.reusedMetadata);
+
+		if (config.showStartupNotification) {
+			void vscode.window.showInformationMessage(`VSCode LSP MCP reused ${allocation.reusedMetadata.mcpUrl}`);
+		}
+
+		return;
+	}
+
+	const version = String(context.extension.packageJSON.version ?? '0.0.0');
+	const server = new LocalMcpServer({
+		version,
+		host: config.host,
+		port: allocation.port,
+		corsEnabled: config.corsEnabled,
+		corsAllowOrigins: config.corsAllowOrigins,
+		corsWithCredentials: config.corsWithCredentials,
+	});
+
+	const metadata = await server.start();
+	runtimeState.server = server;
+	runtimeState.metadata = metadata;
+
+	if (config.showStartupNotification) {
+		void vscode.window.showInformationMessage(`VSCode LSP MCP listening on ${metadata.mcpUrl}`);
+	}
+}
+
+function registerCommands(context: vscode.ExtensionContext): void {
+	context.subscriptions.push(
+		vscode.commands.registerCommand('vscode-lsp-mcp.showServerInfo', async () => {
+			if (!runtimeState.metadata) {
+				await vscode.window.showWarningMessage('VSCode LSP MCP is not running.');
+				return;
+			}
+
+			await vscode.window.showInformationMessage(
+				`Workspace: ${runtimeState.metadata.workspaceDisplayName}\nMCP URL: ${runtimeState.metadata.mcpUrl}\nStatus: ${runtimeState.metadata.status}`,
+			);
+		}),
+		vscode.commands.registerCommand('vscode-lsp-mcp.copyServerUrl', async () => {
+			if (!runtimeState.metadata) {
+				await vscode.window.showWarningMessage('VSCode LSP MCP is not running.');
+				return;
+			}
+
+			await vscode.env.clipboard.writeText(runtimeState.metadata.mcpUrl);
+			await vscode.window.showInformationMessage(`Copied ${runtimeState.metadata.mcpUrl}`);
+		}),
+		vscode.commands.registerCommand('vscode-lsp-mcp.showLogs', () => {
+			logger.show();
+		}),
+	);
+}
+
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
+	registerCommands(context);
+
+	context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((event) => {
+		if (event.affectsConfiguration('vscode-lsp-mcp')) {
+			logger.info('extension', 'configuration changed; reload window to apply server changes');
+			void vscode.window.showInformationMessage('VSCode LSP MCP settings changed. Reload the window to apply them.');
+		}
+	}));
+
+	try {
+		await startRuntime(context);
+	}
+	catch (error) {
+		logger.error('extension', 'activation failed', error);
+		void vscode.window.showErrorMessage(
+			`VSCode LSP MCP failed to start: ${error instanceof Error ? error.message : String(error)}`,
+		);
+	}
+}
+
+export async function deactivate(): Promise<void> {
+	await runtimeState.server?.dispose();
+	runtimeState.server = undefined;
+	runtimeState.metadata = undefined;
+	logger.dispose();
+}

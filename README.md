@@ -1,71 +1,183 @@
-# vscode-lsp-mcp README
+# VSCode LSP MCP
 
-This is the README for your extension "vscode-lsp-mcp". After writing up a brief description, we recommend including the following sections.
+`vscode-lsp-mcp` is a VS Code extension that exposes model-friendly code navigation tools over MCP.
 
-## Features
+The goal is not to copy raw LSP primitives into MCP. The goal is to redesign them for models.
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+## Why This Extension Exists
 
-For example if there is an image subfolder under your extension project workspace:
+Most LSP tools are designed for humans sitting inside an editor. That is reasonable for VS Code, but not ideal for an LLM.
 
-\!\[feature X\]\(images/feature-x.png\)
+For example, Claude Code exposes an `lsp` tool with operations such as:
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+- `goToDefinition`
+- `findReferences`
+- `hover`
+- `documentSymbol`
+- `workspaceSymbol`
+- `goToImplementation`
+- `prepareCallHierarchy`
+- `incomingCalls`
+- `outgoingCalls`
 
-## Requirements
+This is still too close to the original LSP surface area.
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+Take call hierarchy as an example: to get the full incoming hierarchy, the model must first call `prepareCallHierarchy`, then call `incomingCalls` again. That flow is natural for an editor integration, but awkward for a model.
+
+More importantly, classic LSP APIs require symbol positions:
+
+- `filePath`
+- `line`
+- `character`
+
+For humans, that is fine. For models, `character` is especially unfriendly. Even when the model can identify the file and line, precise character offsets are still noisy and error-prone.
+
+There is also a second problem: many LSP APIs only return locations.
+
+- `goToDefinition`
+- `findReferences`
+- `documentSymbol`
+
+These results are accurate, but the model still has to re-read the target text afterwards. That means more tool calls and more latency.
+
+`hover` is another example. It is very useful in an editor, but for a model it often overlaps with "give me the definition and the actual source text".
+
+I used to work on C/C++ LSP tooling and know the LSP feature set well. This extension is built around a simple idea:
+
+> Do not expose raw editor-oriented LSP commands directly. Expose higher-level symbol tools that reduce parameter burden and return useful text immediately.
+
+## Core Tools
+
+This extension currently exposes three MCP tools.
+
+| Tool | Description | How it works |
+| --- | --- | --- |
+| `searchSymbol` | Find symbol definitions by symbol name and return both location and definition text | Uses `workspaceSymbol`, then opens the resolved document and returns the actual source text |
+| `documentSymbols` | Quickly show all top-level symbols in a file | Uses `documentSymbol`, with optional `imports/includes` output |
+| `FindReference` | Find all references of a symbol when you need to update it everywhere | Resolves the symbol definition first, then calls reference search and returns code snippets with each result |
+
+## Why These Tools Are Better For Models
+
+- `searchSymbol` accepts a symbol name instead of forcing the model to provide `line` and `character`.
+- `searchSymbol` returns definition text directly, so the model often does not need another file read.
+- `documentSymbols` is optimized for fast file-level navigation, which is what models often need first.
+- `FindReference` already covers the practical value of `incomingCalls` for most refactoring tasks, so there is no need to expose both.
+
+## MCP Server
+
+The extension starts a local MCP server automatically when VS Code finishes startup.
+
+- Transport: MCP Streamable HTTP
+- MCP endpoint: `GET/POST /mcp`
+- Metadata endpoint: `GET /info`
+- Health endpoint: `GET /health`
+
+You can use the built-in commands to inspect the current address:
+
+- `VSCode LSP MCP: Show Server Info`
+- `VSCode LSP MCP: Copy MCP URL`
+- `VSCode LSP MCP: Show Logs`
+
+## Stable Per-Workspace Ports
+
+This extension supports multiple VS Code windows cleanly.
+
+- Different workspaces get different ports.
+- The same workspace keeps the same preferred port across restarts.
+- If the same workspace is already being served by another VS Code window, the new window reuses that existing MCP endpoint instead of starting a duplicate server.
+
+Workspace identity is derived from:
+
+- the `.code-workspace` URI when present
+- otherwise the single-root folder URI
+- otherwise a stable multi-root signature
+
+That makes it practical to configure external tools per project without the port changing every time you reopen VS Code.
+
+## Example MCP Config
+
+After the extension starts, use the URL shown by `Show Server Info`.
+
+Cursor:
+
+```json
+{
+  "mcpServers": {
+    "vscode-lsp": {
+      "url": "http://127.0.0.1:9527/mcp"
+    }
+  }
+}
+```
+
+Claude Code:
+
+```json
+{
+  "mcpServers": {
+    "vscode-lsp": {
+      "type": "http",
+      "url": "http://127.0.0.1:9527/mcp"
+    }
+  }
+}
+```
+
+Gemini / tools that support streamable HTTP:
+
+```json
+{
+  "mcpServers": {
+    "vscode-lsp": {
+      "type": "streamable-http",
+      "httpUrl": "http://127.0.0.1:9527/mcp"
+    }
+  }
+}
+```
 
 ## Extension Settings
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+The extension contributes these settings:
 
-For example:
+| Setting | Description | Default |
+| --- | --- | --- |
+| `vscode-lsp-mcp.enabled` | Enable or disable the local MCP server | `true` |
+| `vscode-lsp-mcp.host` | Host used by the local MCP server | `127.0.0.1` |
+| `vscode-lsp-mcp.basePort` | Base port for workspace-specific port allocation | `9527` |
+| `vscode-lsp-mcp.portRangeSize` | Size of the stable port allocation range | `200` |
+| `vscode-lsp-mcp.cors.enabled` | Enable CORS headers | `true` |
+| `vscode-lsp-mcp.cors.allowOrigins` | Allowed origins, `*` or comma-separated list | `*` |
+| `vscode-lsp-mcp.cors.withCredentials` | Allow credentials in CORS requests | `false` |
+| `vscode-lsp-mcp.logLevel` | Minimum output log level | `info` |
+| `vscode-lsp-mcp.showStartupNotification` | Show startup or reuse notifications | `true` |
 
-This extension contributes the following settings:
+## Logging And Troubleshooting
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+The extension uses a dedicated VS Code `OutputChannel` named `VSCode LSP MCP`.
 
-## Known Issues
+It records:
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+- activation and shutdown
+- workspace identity
+- port selection and port reuse
+- MCP session lifecycle
+- tool invocation inputs
+- failures and stack traces
 
-## Release Notes
+If something looks wrong, the first step is usually to run `VSCode LSP MCP: Show Logs`.
 
-Users appreciate release notes as you update your extension.
+## Development
 
-### 1.0.0
+```bash
+pnpm install
+pnpm run lint
+pnpm run compile
+pnpm run vsix
+```
 
-Initial release of ...
+## Notes
 
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
-
----
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+- This extension depends on language providers already available inside VS Code.
+- It does not replace your language extensions. It reuses the language intelligence they already provide.
+- Results are only as good as the active language server for the current workspace.
