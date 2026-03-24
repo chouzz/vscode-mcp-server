@@ -8,9 +8,9 @@ const path = require('path');
 /** @typedef {import('webpack').Configuration} WebpackConfig **/
 
 /** @type WebpackConfig */
-const extensionConfig = {
+const extensionConfig = (argv) => ({
   target: 'node', // VS Code extensions run in a Node.js-context 📖 -> https://webpack.js.org/configuration/node/
-	mode: 'none', // this leaves the source code as close as possible to the original (when packaging we set this to 'production')
+	mode: argv.mode === 'production' ? 'production' : 'none', // production minifies for packaging; dev keeps readable output
 
   entry: './src/extension.ts', // the entry point of this extension, 📖 -> https://webpack.js.org/configuration/entry-context/
   output: {
@@ -44,5 +44,5 @@ const extensionConfig = {
   infrastructureLogging: {
     level: "log", // enables logging required for problem matchers
   },
-};
-module.exports = [ extensionConfig ];
+});
+module.exports = (env, argv) => [extensionConfig(argv)];

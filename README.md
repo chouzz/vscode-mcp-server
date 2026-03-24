@@ -170,10 +170,10 @@ If something looks wrong, the first step is usually to run `VSCode LSP MCP: Show
 ## Development
 
 ```bash
-pnpm install
-pnpm run lint
-pnpm run compile
-pnpm run vsix
+npm install
+npm run lint
+npm run compile
+npm run vsix
 ```
 
 ## Notes
