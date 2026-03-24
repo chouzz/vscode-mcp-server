@@ -13,14 +13,14 @@ let outputChannel: vscode.OutputChannel | undefined;
 
 function getOutputChannel(): vscode.OutputChannel {
 	if (!outputChannel) {
-		outputChannel = vscode.window.createOutputChannel('VSCode LSP MCP');
+		outputChannel = vscode.window.createOutputChannel('VSCode MCP Server');
 	}
 
 	return outputChannel;
 }
 
 function getConfiguredLevel(): LogLevel {
-	const config = vscode.workspace.getConfiguration('vscode-lsp-mcp');
+	const config = vscode.workspace.getConfiguration('vscode-mcp-server');
 	return config.get<LogLevel>('logLevel', 'info');
 }
 

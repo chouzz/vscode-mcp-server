@@ -231,7 +231,7 @@ export class LocalMcpServer {
 
 	private createSessionServer(): McpServer {
 		const server = new McpServer({
-			name: 'vscode-lsp-mcp',
+			name: 'vscode-mcp-server',
 			version: this.options.version,
 		});
 

@@ -1,6 +1,6 @@
 {
-  "name": "vscode-lsp-mcp",
-  "displayName": "vscode-lsp-mcp",
+  "name": "vscode-mcp-server",
+  "displayName": "vscode-mcp-server",
   "description": "Expose model-friendly symbol navigation tools from VS Code over MCP.",
   "version": "0.0.1",
   "engines": {
@@ -16,61 +16,61 @@
   "contributes": {
     "commands": [
       {
-        "command": "vscode-lsp-mcp.showServerInfo",
-        "title": "VSCode LSP MCP: Show Server Info"
+        "command": "vscode-mcp-server.showServerInfo",
+        "title": "VSCode MCP Server: Show Server Info"
       },
       {
-        "command": "vscode-lsp-mcp.copyServerUrl",
-        "title": "VSCode LSP MCP: Copy MCP URL"
+        "command": "vscode-mcp-server.copyServerUrl",
+        "title": "VSCode MCP Server: Copy MCP URL"
       },
       {
-        "command": "vscode-lsp-mcp.showLogs",
-        "title": "VSCode LSP MCP: Show Logs"
+        "command": "vscode-mcp-server.showLogs",
+        "title": "VSCode MCP Server: Show Logs"
       }
     ],
     "configuration": {
-      "title": "VSCode LSP MCP",
+      "title": "VSCode MCP Server",
       "properties": {
-        "vscode-lsp-mcp.enabled": {
+        "vscode-mcp-server.enabled": {
           "type": "boolean",
           "default": true,
           "description": "Enable the local MCP server."
         },
-        "vscode-lsp-mcp.host": {
+        "vscode-mcp-server.host": {
           "type": "string",
           "default": "127.0.0.1",
           "description": "Host address used by the local MCP server."
         },
-        "vscode-lsp-mcp.basePort": {
+        "vscode-mcp-server.basePort": {
           "type": "number",
           "default": 9527,
           "minimum": 1,
           "maximum": 65535,
           "description": "Base port used to derive a stable workspace-specific MCP port."
         },
-        "vscode-lsp-mcp.portRangeSize": {
+        "vscode-mcp-server.portRangeSize": {
           "type": "number",
           "default": 200,
           "minimum": 1,
           "maximum": 2000,
           "description": "How many ports are reserved for stable workspace-specific allocation."
         },
-        "vscode-lsp-mcp.cors.enabled": {
+        "vscode-mcp-server.cors.enabled": {
           "type": "boolean",
           "default": true,
           "description": "Enable CORS headers for browser-based MCP clients."
         },
-        "vscode-lsp-mcp.cors.allowOrigins": {
+        "vscode-mcp-server.cors.allowOrigins": {
           "type": "string",
           "default": "*",
           "description": "Allowed origins for CORS. Use '*' or a comma-separated list."
         },
-        "vscode-lsp-mcp.cors.withCredentials": {
+        "vscode-mcp-server.cors.withCredentials": {
           "type": "boolean",
           "default": false,
           "description": "Whether CORS requests may include credentials."
         },
-        "vscode-lsp-mcp.logLevel": {
+        "vscode-mcp-server.logLevel": {
           "type": "string",
           "enum": [
             "debug",
@@ -79,9 +79,9 @@
             "error"
           ],
           "default": "info",
-          "description": "Minimum log level written to the VSCode LSP MCP output channel."
+          "description": "Minimum log level written to the VSCode MCP Server output channel."
         },
-        "vscode-lsp-mcp.showStartupNotification": {
+        "vscode-mcp-server.showStartupNotification": {
           "type": "boolean",
           "default": true,
           "description": "Show a notification when the server starts or reuses an existing workspace server."

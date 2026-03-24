@@ -1,8 +1,14 @@
-# VSCode LSP MCP
+# VSCode MCP Server
 
-`vscode-lsp-mcp` is a VS Code extension that exposes model-friendly code navigation tools over MCP.
+![Version](https://img.shields.io/badge/version-0.0.1-blue)
+![VS Code](https://img.shields.io/badge/VS%20Code-%3E%3D1.103.0-007ACC?logo=visual-studio-code)
+![MCP](https://img.shields.io/badge/MCP-Streamable%20HTTP-orange)
+
+`vscode-mcp-server` is a VS Code extension that exposes model-friendly code navigation tools over MCP.
 
 The goal is not to copy raw LSP primitives into MCP. The goal is to redesign them for models.
+
+---
 
 ## Why This Extension Exists
 
@@ -46,37 +52,43 @@ I used to work on C/C++ LSP tooling and know the LSP feature set well. This exte
 
 > Do not expose raw editor-oriented LSP commands directly. Expose higher-level symbol tools that reduce parameter burden and return useful text immediately.
 
+---
+
 ## Core Tools
 
 This extension currently exposes three MCP tools.
 
 | Tool | Description | How it works |
-| --- | --- | --- |
+| :--- | :--- | :--- |
 | `searchSymbol` | Find symbol definitions by symbol name and return both location and definition text | Uses `workspaceSymbol`, then opens the resolved document and returns the actual source text |
 | `documentSymbols` | Quickly show all top-level symbols in a file | Uses `documentSymbol`, with optional `imports/includes` output |
 | `FindReference` | Find all references of a symbol when you need to update it everywhere | Resolves the symbol definition first, then calls reference search and returns code snippets with each result |
 
-## Why These Tools Are Better For Models
+### Why These Tools Are Better For Models
 
 - `searchSymbol` accepts a symbol name instead of forcing the model to provide `line` and `character`.
 - `searchSymbol` returns definition text directly, so the model often does not need another file read.
 - `documentSymbols` is optimized for fast file-level navigation, which is what models often need first.
 - `FindReference` already covers the practical value of `incomingCalls` for most refactoring tasks, so there is no need to expose both.
 
+---
+
 ## MCP Server
 
 The extension starts a local MCP server automatically when VS Code finishes startup.
 
-- Transport: MCP Streamable HTTP
-- MCP endpoint: `GET/POST /mcp`
-- Metadata endpoint: `GET /info`
-- Health endpoint: `GET /health`
+- **Transport**: MCP Streamable HTTP
+- **MCP endpoint**: `GET/POST /mcp`
+- **Metadata endpoint**: `GET /info`
+- **Health endpoint**: `GET /health`
 
 You can use the built-in commands to inspect the current address:
 
-- `VSCode LSP MCP: Show Server Info`
-- `VSCode LSP MCP: Copy MCP URL`
-- `VSCode LSP MCP: Show Logs`
+- `VSCode MCP Server: Show Server Info`
+- `VSCode MCP Server: Copy MCP URL`
+- `VSCode MCP Server: Show Logs`
+
+---
 
 ## Stable Per-Workspace Ports
 
@@ -94,28 +106,30 @@ Workspace identity is derived from:
 
 That makes it practical to configure external tools per project without the port changing every time you reopen VS Code.
 
+---
+
 ## Example MCP Config
 
 After the extension starts, use the URL shown by `Show Server Info`.
 
-Cursor:
+### Cursor
 
 ```json
 {
   "mcpServers": {
-    "vscode-lsp": {
+    "vscode-mcp-server": {
       "url": "http://127.0.0.1:9527/mcp"
     }
   }
 }
 ```
 
-Claude Code:
+### Claude Code
 
 ```json
 {
   "mcpServers": {
-    "vscode-lsp": {
+    "vscode-mcp-server": {
       "type": "http",
       "url": "http://127.0.0.1:9527/mcp"
     }
@@ -123,12 +137,12 @@ Claude Code:
 }
 ```
 
-Gemini / tools that support streamable HTTP:
+### Gemini / tools that support streamable HTTP
 
 ```json
 {
   "mcpServers": {
-    "vscode-lsp": {
+    "vscode-mcp-server": {
       "type": "streamable-http",
       "httpUrl": "http://127.0.0.1:9527/mcp"
     }
@@ -136,25 +150,29 @@ Gemini / tools that support streamable HTTP:
 }
 ```
 
+---
+
 ## Extension Settings
 
 The extension contributes these settings:
 
 | Setting | Description | Default |
-| --- | --- | --- |
-| `vscode-lsp-mcp.enabled` | Enable or disable the local MCP server | `true` |
-| `vscode-lsp-mcp.host` | Host used by the local MCP server | `127.0.0.1` |
-| `vscode-lsp-mcp.basePort` | Base port for workspace-specific port allocation | `9527` |
-| `vscode-lsp-mcp.portRangeSize` | Size of the stable port allocation range | `200` |
-| `vscode-lsp-mcp.cors.enabled` | Enable CORS headers | `true` |
-| `vscode-lsp-mcp.cors.allowOrigins` | Allowed origins, `*` or comma-separated list | `*` |
-| `vscode-lsp-mcp.cors.withCredentials` | Allow credentials in CORS requests | `false` |
-| `vscode-lsp-mcp.logLevel` | Minimum output log level | `info` |
-| `vscode-lsp-mcp.showStartupNotification` | Show startup or reuse notifications | `true` |
+| :--- | :--- | :--- |
+| `vscode-mcp-server.enabled` | Enable or disable the local MCP server | `true` |
+| `vscode-mcp-server.host` | Host used by the local MCP server | `127.0.0.1` |
+| `vscode-mcp-server.basePort` | Base port for workspace-specific port allocation | `9527` |
+| `vscode-mcp-server.portRangeSize` | Size of the stable port allocation range | `200` |
+| `vscode-mcp-server.cors.enabled` | Enable CORS headers | `true` |
+| `vscode-mcp-server.cors.allowOrigins` | Allowed origins, `*` or comma-separated list | `*` |
+| `vscode-mcp-server.cors.withCredentials` | Allow credentials in CORS requests | `false` |
+| `vscode-mcp-server.logLevel` | Minimum output log level | `info` |
+| `vscode-mcp-server.showStartupNotification` | Show startup or reuse notifications | `true` |
+
+---
 
 ## Logging And Troubleshooting
 
-The extension uses a dedicated VS Code `OutputChannel` named `VSCode LSP MCP`.
+The extension uses a dedicated VS Code `OutputChannel` named `VSCode MCP Server`.
 
 It records:
 
@@ -165,7 +183,9 @@ It records:
 - tool invocation inputs
 - failures and stack traces
 
-If something looks wrong, the first step is usually to run `VSCode LSP MCP: Show Logs`.
+If something looks wrong, the first step is usually to run `VSCode MCP Server: Show Logs`.
+
+---
 
 ## Development
 
@@ -175,6 +195,8 @@ npm run lint
 npm run compile
 npm run vsix
 ```
+
+---
 
 ## Notes
 
