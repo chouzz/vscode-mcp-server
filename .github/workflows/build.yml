@@ -1,4 +1,4 @@
-name: Build VSIX
+name: CI
 
 on:
   push:
@@ -6,12 +6,20 @@ on:
       - main
       - master
   pull_request:
+    branches:
+      - main
+      - master
+  release:
+    types:
+      - published
   workflow_dispatch:
 
 jobs:
   build:
+    name: Build Extension
     runs-on: ubuntu-latest
-
+    outputs:
+      vsixPath: ${{ steps.packageExtension.outputs.vsixPath }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,11 +36,58 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Package VSIX
-        run: npx --no-install vsce package --no-dependencies
+      - name: Package Extension
+        id: packageExtension
+        uses: HaaLeo/publish-vscode-extension@v1
+        with:
+          pat: stub
+          dryRun: true
 
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@v4
         with:
           name: vscode-mcp-server-vsix
-          path: "*.vsix"
+          path: ${{ steps.packageExtension.outputs.vsixPath }}
+
+  publish:
+    name: Publish Extension
+    needs:
+      - build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Publish to Open VSX Registry
+        uses: HaaLeo/publish-vscode-extension@v2
+        id: publishToOpenVSX
+        with:
+          pat: ${{ secrets.OPEN_VSX_TOKEN }}
+
+      - name: Publish to Visual Studio Marketplace
+        uses: HaaLeo/publish-vscode-extension@v2
+        with:
+          pat: ${{ secrets.VS_MARKETPLACE_TOKEN }}
+          registryUrl: https://marketplace.visualstudio.com
+          extensionFile: ${{ steps.publishToOpenVSX.outputs.vsixPath }}
+
+      - name: Upload VSIX to Release Assets
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ${{ steps.publishToOpenVSX.outputs.vsixPath }}
+          asset_name: vscode-mcp-server-${{ github.event.release.tag_name }}.vsix
+          asset_content_type: application/zip
